@@ -1,38 +1,44 @@
+require('dotenv').config();
+
+const { panelId, intervalMs, sessionDurationMs, debug } = require('./config');
+const { startSession, stopSession } = require('./core/sessionClient');
+const { sendTelemetry } = require('./core/sender');
 const { generateSensorData } = require('./core/dataGenerator');
-const { sendData } = require('./core/sender');
-const { log, error } = require('./utils/logger');
-const { intervalMs, sessionDurationMs } = require('./config');
 const { pickRandomScenario, getActiveScenarioKey } = require('./utils/random');
 
-function startSimulation() {
+(async () => {
   try {
-    log('=== Iniciando simulación de sesión de limpieza ===');
-    pickRandomScenario();
+    pickRandomScenario?.();
+    console.log('▶ Iniciando simulador');
+    console.log('· Panel:', panelId);
+    console.log('· Escenario:', getActiveScenarioKey?.() || 'default');
 
-    const initialData = generateSensorData();
-    const sessionId = initialData.session_id;
+    const sessionId = await startSession(panelId, { scenario: getActiveScenarioKey?.() });
+    console.log('· sessionId:', sessionId);
 
-    log(`session_id: ${sessionId}`);
-    log(`Escenario: ${getActiveScenarioKey()}`);
-    log(`Intervalo: ${intervalMs / 1000} segundos`);
-    log(`Duración: ${(sessionDurationMs / 1000 / 60).toFixed(1)} minutos`);
+    const tick = async () => {
+      const sim = generateSensorData();
+      try {
+        await sendTelemetry(sim, sessionId, panelId);
+        if (debug) console.log('ok', new Date().toISOString());
+      } catch (e) {
+        console.warn('fallo envío:', e?.message || e);
+      }
+    };
 
-    sendData(initialData);
+    // primer envío inmediato
+    await tick();
 
-    const interval = setInterval(async () => {
-      const data = generateSensorData();
-      await sendData(data);
-    }, intervalMs);
+    const intId = setInterval(tick, intervalMs);
 
-    setTimeout(() => {
-      clearInterval(interval);
-      log(`✅ Simulación finalizada — session_id: ${sessionId}`);
+    setTimeout(async () => {
+      clearInterval(intId);
+      await stopSession(sessionId);
+      console.log('✅ Simulación finalizada:', sessionId);
     }, sessionDurationMs);
 
   } catch (e) {
-    error(`Fallo al iniciar la simulación: ${e.message}`);
+    console.error('❌ Error al iniciar simulador:', e?.message || e);
     process.exit(1);
   }
-}
-
-startSimulation();
+})();
