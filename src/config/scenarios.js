@@ -1,5 +1,3 @@
-// src/config/scenarios.js
-
 const SCENARIOS = {
   optimal_maintenance: {
     label: 'Panel nuevo o con limpieza reciente y frecuente',
